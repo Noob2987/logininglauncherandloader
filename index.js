@@ -17,53 +17,70 @@ if (fs.existsSync(USERS_FILE)) {
     }
 }
 
-app.post('/api/register', (req, res) => {
-    const { username, email, password } = req.body;
-    if (!username || !email || !password) {
-        return res.status(400).json({ success: false, message: "Заполните все поля" });
+// Главный обработчик для лаунчера
+app.post('/api', (req, res) => {
+    const { type, username, email, password } = req.body;
+
+    if (type === 'register') {
+        if (!username || !email || !password) {
+            return res.json({ type: 'error', message: "Заполните все поля" });
+        }
+        if (users.find(u => u.username === username || u.email === email)) {
+            return res.json({ type: 'error', message: "Пользователь уже существует" });
+        }
+
+        const newUser = {
+            id: Date.now().toString(),
+            username,
+            email,
+            password,           // В продакшене используй bcrypt!
+            role: "Player",
+            hwid: null,
+            createdAt: new Date().toISOString()
+        };
+
+        users.push(newUser);
+        fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
+
+        return res.json({ 
+            type: 'auth_success', 
+            username: newUser.username, 
+            role: newUser.role, 
+            uid: newUser.id 
+        });
     }
 
-    if (users.find(u => u.username === username || u.email === email)) {
-        return res.status(400).json({ success: false, message: "Пользователь уже существует" });
+    if (type === 'login') {
+        if (!username || !password) {
+            return res.json({ type: 'error', message: "Заполните все поля" });
+        }
+
+        const user = users.find(u => 
+            (u.username === username || u.email === username) && u.password === password
+        );
+
+        if (!user) {
+            return res.json({ type: 'error', message: "Неверный логин или пароль" });
+        }
+
+        return res.json({
+            type: 'auth_success',
+            username: user.username,
+            role: user.role,
+            uid: user.id
+        });
     }
 
-    const newUser = {
-        id: Date.now().toString(),
-        username,
-        email,
-        password, // В реальном проекте используй bcrypt!
-        role: "Player",
-        hwid: null,
-        createdAt: new Date().toISOString()
-    };
-
-    users.push(newUser);
-    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
-
-    res.json({ success: true, message: "Регистрация успешна" });
+    res.json({ type: 'error', message: "Неизвестный тип запроса" });
 });
 
-app.post('/api/login', (req, res) => {
-    const { username, password } = req.body;
-    const user = users.find(u => (u.username === username || u.email === username) && u.password === password);
-
-    if (!user) {
-        return res.status(401).json({ success: false, message: "Неверный логин или пароль" });
-    }
-
-    res.json({
-        success: true,
-        username: user.username,
-        role: user.role,
-        uid: user.id,
-        hwid: user.hwid
-    });
-});
+// Старые маршруты для совместимости
+app.post('/api/register', (req, res) => { /* перенаправляем */ req.body.type = 'register'; return app._router.handle(req, res, () => {}); });
+app.post('/api/login', (req, res) => { req.body.type = 'login'; return app._router.handle(req, res, () => {}); });
 
 app.get('/api/auth', (req, res) => {
     const hwid = req.query.hwid;
-    if (!hwid) return res.status(400).send('no hwid');
-
+    if (!hwid) return res.send('denied');
     const user = users.find(u => u.hwid === hwid);
     res.send(user ? 'success' : 'denied');
 });
@@ -81,4 +98,6 @@ app.post('/api/bind-hwid', (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Metadone Backend запущен на ${PORT}`));
+app.listen(PORT, () => {
+    console.log(`🚀 Metadone Backend запущен на порту ${PORT}`);
+});
