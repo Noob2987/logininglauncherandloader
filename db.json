@@ -4,7 +4,12 @@
     {
       "key": "MT-JmMx-90d9-DC1x-Lfj78kf",
       "used": false,
-      "expire": "2030-10-20T00:00:00Z"
+      "expire": "2030-12-31T23:59:59Z"
+    },
+    {
+      "key": "MT-TEST-AAAA-BBBB-CCCC",
+      "used": false,
+      "expire": "2027-06-25T00:00:00Z"
     }
   ]
 }
