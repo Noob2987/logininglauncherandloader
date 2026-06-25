@@ -1,67 +1,73 @@
 const express = require("express");
 const fs = require("fs");
-
+const cors = require("cors");
 const app = express();
+
+app.use(cors());
 app.use(express.json());
 
 const DB = "./db.json";
 
-function load() {
-    return JSON.parse(fs.readFileSync(DB));
+function loadDB() {
+    return JSON.parse(fs.readFileSync(DB, "utf8"));
 }
-function save(data) {
+
+function saveDB(data) {
     fs.writeFileSync(DB, JSON.stringify(data, null, 2));
 }
 
-// REGISTER (license + HWID bind + expiry)
+// Получение HWID (примерно так же, как в клиенте)
+function getHWID() {
+    // Здесь можно добавить дополнительные параметры, если нужно
+    return "hwid-placeholder"; // будет перезаписано клиентом
+}
+
+// REGISTER
 app.post("/register", (req, res) => {
-    const { login, password, key, hwid } = req.body;
+    const { login, email, key, hwid } = req.body;
 
-    let db = load();
+    if (!login || !email || !key || !hwid) {
+        return res.json({ status: "missing_data" });
+    }
 
-    let license = db.licenses.find(l => l.key === key);
+    let db = loadDB();
 
-    if (!license)
-        return res.json({ status: "invalid_key" });
+    const license = db.licenses.find(l => l.key === key && !l.used);
+    if (!license) return res.json({ status: "invalid_key" });
 
-    if (license.used)
-        return res.json({ status: "key_used" });
+    // Проверка, существует ли уже такой логин
+    if (db.users.some(u => u.login === login)) {
+        return res.json({ status: "login_exists" });
+    }
 
     db.users.push({
         login,
-        password,
+        email,
+        password: "", // можно добавить пароль позже, если нужно
         hwid,
+        key,
         expire: license.expire
     });
 
     license.used = true;
-
-    save(db);
+    saveDB(db);
 
     res.json({ status: "ok" });
 });
 
-// LOGIN + HWID + EXPIRY CHECK
+// LOGIN
 app.post("/login", (req, res) => {
-    const { login, password, hwid } = req.body;
+    const { login, key, hwid } = req.body;
 
-    let db = load();
+    let db = loadDB();
+    const user = db.users.find(u => u.login === login);
 
-    let user = db.users.find(u => u.login === login);
-
-    if (!user)
-        return res.json({ status: "not_found" });
-
-    if (user.password !== password)
-        return res.json({ status: "wrong_pass" });
-
-    if (user.hwid !== hwid)
-        return res.json({ status: "hwid_fail" });
-
-    if (Date.now() > user.expire)
-        return res.json({ status: "expired" });
+    if (!user) return res.json({ status: "not_found" });
+    if (user.key !== key) return res.json({ status: "wrong_key" });
+    if (user.hwid !== hwid) return res.json({ status: "hwid_mismatch" });
+    if (Date.now() > new Date(user.expire).getTime()) return res.json({ status: "expired" });
 
     res.json({ status: "ok" });
 });
 
-app.listen(3000, () => console.log("API running"));
+app.listen(3000, () => console.log("Metadone API running on port 3000"));
