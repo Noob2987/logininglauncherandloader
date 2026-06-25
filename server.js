@@ -1,44 +1,78 @@
 const express = require("express");
-const fs = require("fs");
+const fs = require("fs-extra");
+const cors = require("cors");
 
 const app = express();
+app.use(cors());
 app.use(express.json());
 
-let keys = require("./key.json");
-let users = [];
+const DB_FILE = "./db.json";
+const KEY_FILE = "./key.json";
 
-app.get("/keys", (req, res) => {
-    res.json(keys);
-});
+function loadDB() {
+    return fs.readJsonSync(DB_FILE);
+}
 
+function saveDB(db) {
+    fs.writeJsonSync(DB_FILE, db);
+}
+
+function loadKeys() {
+    return fs.readJsonSync(KEY_FILE).keys;
+}
+
+// REGISTER (auto HWID bind)
 app.post("/register", (req, res) => {
-    const { login, hwid, key } = req.body;
+    const { login, password, key, hwid } = req.body;
 
-    if (!keys.keys.includes(key))
+    let db = loadDB();
+    let keys = loadKeys();
+
+    if (!keys.includes(key))
         return res.json({ status: "invalid_key" });
 
-    let user = users.find(u => u.login === login);
+    if (db.users.find(u => u.login === login))
+        return res.json({ status: "user_exists" });
 
-    if (user)
-        return res.json({ status: "exists" });
+    db.users.push({
+        login,
+        password,
+        hwid,
+        key
+    });
 
-    users.push({ login, hwid, key });
+    saveDB(db);
 
-    return res.json({ status: "ok" });
+    res.json({ status: "ok" });
 });
 
+// LOGIN + HWID CHECK
 app.post("/login", (req, res) => {
-    const { login, hwid } = req.body;
+    const { login, password, hwid } = req.body;
 
-    let user = users.find(u => u.login === login);
+    let db = loadDB();
+
+    let user = db.users.find(u => u.login === login);
 
     if (!user)
         return res.json({ status: "not_found" });
 
+    if (user.password !== password)
+        return res.json({ status: "wrong_pass" });
+
+    // HWID bind logic
+    if (!user.hwid) {
+        user.hwid = hwid;
+        saveDB(db);
+        return res.json({ status: "first_bind" });
+    }
+
     if (user.hwid !== hwid)
         return res.json({ status: "hwid_fail" });
 
-    return res.json({ status: "ok" });
+    res.json({ status: "ok" });
 });
 
-app.listen(3000, () => console.log("API running"));
+app.listen(3000, () => {
+    console.log("API running on port 3000");
+});
