@@ -1,55 +1,63 @@
 const express = require("express");
 const fs = require("fs");
 const cors = require("cors");
-const app = express();
 
+const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json());   // ОБЯЗАТЕЛЬНО для чтения body
 
 const DB = "./db.json";
 
+// Загрузка и сохранение базы
 function loadDB() {
-    return JSON.parse(fs.readFileSync(DB, "utf8"));
+    try {
+        return JSON.parse(fs.readFileSync(DB, "utf8"));
+    } catch (e) {
+        return { users: [], licenses: [] };
+    }
 }
 
 function saveDB(data) {
     fs.writeFileSync(DB, JSON.stringify(data, null, 2));
 }
 
-// Получение HWID (примерно так же, как в клиенте)
-function getHWID() {
-    // Здесь можно добавить дополнительные параметры, если нужно
-    return "hwid-placeholder"; // будет перезаписано клиентом
-}
+// Главная страница (чтобы не было Cannot GET /)
+app.get("/", (req, res) => {
+    res.send("Metadone DLC API is running ✅");
+});
 
 // REGISTER
 app.post("/register", (req, res) => {
-    const { login, email, key, hwid } = req.body;
-
-    if (!login || !email || !key || !hwid) {
+    const { login, email, key, password, hwid } = req.body;
+    
+    if (!login || !email || !key || !password || !hwid) {
         return res.json({ status: "missing_data" });
     }
 
     let db = loadDB();
 
-    const license = db.licenses.find(l => l.key === key && !l.used);
-    if (!license) return res.json({ status: "invalid_key" });
+    // Проверка ключа
+    const licenseIndex = db.licenses.findIndex(l => l.key === key && !l.used);
+    if (licenseIndex === -1) {
+        return res.json({ status: "invalid_key" });
+    }
 
-    // Проверка, существует ли уже такой логин
+    // Проверка существования логина
     if (db.users.some(u => u.login === login)) {
         return res.json({ status: "login_exists" });
     }
 
+    // Создаём пользователя
     db.users.push({
         login,
         email,
-        password: "", // можно добавить пароль позже, если нужно
+        password,        // В реальном проекте нужно хэшировать!
         hwid,
         key,
-        expire: license.expire
+        expire: db.licenses[licenseIndex].expire
     });
 
-    license.used = true;
+    db.licenses[licenseIndex].used = true;
     saveDB(db);
 
     res.json({ status: "ok" });
@@ -58,6 +66,10 @@ app.post("/register", (req, res) => {
 // LOGIN
 app.post("/login", (req, res) => {
     const { login, key, hwid } = req.body;
+
+    if (!login || !key || !hwid) {
+        return res.json({ status: "missing_data" });
+    }
 
     let db = loadDB();
     const user = db.users.find(u => u.login === login);
@@ -70,4 +82,7 @@ app.post("/login", (req, res) => {
     res.json({ status: "ok" });
 });
 
-app.listen(3000, () => console.log("Metadone API running on port 3000"));
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log(`✅ Metadone API запущен на порту ${PORT}`);
+});
