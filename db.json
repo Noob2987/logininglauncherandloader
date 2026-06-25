@@ -1,3 +1,10 @@
 {
-  "users": []
+  "users": [],
+  "licenses": [
+    {
+      "key": "MT-JmMx-90d9-DC1x-Lfj78kf",
+      "used": false,
+      "expire": 1920000000000
+    }
+  ]
 }
